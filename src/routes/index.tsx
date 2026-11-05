@@ -1,111 +1,67 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { Button } from '~/components/ui/button';
-import { Separator } from '~/components/ui/separator';
-import { site, siteUrl } from '~/lib/site';
+import { createFileRoute } from '@tanstack/react-router';
+import { ConstellationSection } from '~/components/home/ConstellationSection';
+import { Hero } from '~/components/home/Hero';
+import { IndustriesSection } from '~/components/home/IndustriesSection';
+import { MissionsSection } from '~/components/home/MissionsSection';
+import { RequestSection } from '~/components/home/RequestSection';
+import { TaskingSection } from '~/components/home/TaskingSection';
+import { pages } from '~/content/pages';
+import { siteUrl } from '~/lib/site';
+import { siteConfig } from '~/site.config';
 import { seo } from '~/utils/seo';
-
-const homePageTitle = 'Build full-stack web apps in minutes with Layerwise';
 
 export const Route = createFileRoute('/')({
   head: () =>
     seo({
-      title: homePageTitle,
-      description: 'Get started by chatting with AI',
-      path: '/',
-      jsonLd: {
-        '@context': 'https://schema.org',
-        '@type': 'WebSite',
-        name: site.name,
-        url: siteUrl('/')
-      }
+      title: pages.home.title,
+      description: pages.home.description,
+      path: pages.home.path,
+      image: pages.home.image,
+      imageAlt: pages.home.imageAlt,
+      jsonLd: [
+        {
+          '@context': 'https://schema.org',
+          '@type': 'Organization',
+          name: siteConfig.company,
+          url: siteUrl('/'),
+          logo: siteUrl('/logo.png'),
+          description: siteConfig.description,
+          foundingDate: String(siteConfig.founded),
+          address: siteConfig.offices.map((city) => ({ '@type': 'PostalAddress', addressLocality: city })),
+          ...(siteConfig.social.length ? { sameAs: siteConfig.social.map((s) => s.href) } : {})
+        },
+        {
+          '@context': 'https://schema.org',
+          '@type': 'SoftwareApplication',
+          name: `${siteConfig.product} Tasking`,
+          applicationCategory: 'BusinessApplication',
+          operatingSystem: 'Web',
+          description:
+            'Task a satellite over any place on Earth and receive 50 cm, eight-band imagery under 90 minutes after capture.',
+          url: siteUrl('/imagery'),
+          publisher: { '@type': 'Organization', name: siteConfig.company },
+          offers: {
+            '@type': 'Offer',
+            price: '0',
+            priceCurrency: 'USD',
+            description: 'Free sample imagery on request',
+            url: siteUrl('/#request')
+          }
+        }
+      ]
     }),
   component: Home
 });
 
 function Home() {
   return (
-    <div className='flex min-h-[100dvh] flex-col bg-background'>
-      <header className='w-full'>
-        <div className='container mx-auto flex h-16 items-center justify-end px-6 sm:px-8'>
-          <Button variant='ghost' asChild>
-            <Link to='/sign-in'>Sign in</Link>
-          </Button>
-        </div>
-      </header>
-
-      <main className='flex flex-1 flex-col items-center justify-center px-6 py-16 text-center sm:px-8'>
-        <div className='mx-auto flex max-w-4xl flex-col items-center gap-8'>
-          <div className='space-y-4'>
-            <h1 className='text-balance text-4xl font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl lg:text-7xl'>
-              {homePageTitle}
-            </h1>
-            <p className='text-balance text-lg text-muted-foreground sm:text-xl md:text-2xl'>
-              Get started by chatting with AI
-            </p>
-          </div>
-
-          <Button size='lg' asChild className='mt-4 rounded-full px-8'>
-            <a
-              href='https://layerwise.app'
-              target='_blank'
-              rel='noopener noreferrer'
-            >
-              Get Started
-            </a>
-          </Button>
-        </div>
-      </main>
-
-      <footer className='w-full border-t'>
-        <div className='container mx-auto px-6 py-8'>
-          <div className='flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground sm:gap-8'>
-            <Button
-              variant='link'
-              size='sm'
-              asChild
-              className='h-auto p-0 text-foreground'
-            >
-              <a
-                href='https://layerwise.app'
-                target='_blank'
-                rel='noopener noreferrer'
-              >
-                Home
-              </a>
-            </Button>
-            <Separator orientation='vertical' className='h-4' />
-            <Button
-              variant='link'
-              size='sm'
-              asChild
-              className='h-auto p-0 text-foreground'
-            >
-              <a
-                href='https://layerwise.app/docs'
-                target='_blank'
-                rel='noopener noreferrer'
-              >
-                Docs
-              </a>
-            </Button>
-            <Separator orientation='vertical' className='h-4' />
-            <Button
-              variant='link'
-              size='sm'
-              asChild
-              className='h-auto p-0 text-foreground'
-            >
-              <a
-                href='https://layerwise.app/support'
-                target='_blank'
-                rel='noopener noreferrer'
-              >
-                Support
-              </a>
-            </Button>
-          </div>
-        </div>
-      </footer>
-    </div>
+    <>
+      <Hero />
+      <TaskingSection />
+      <IndustriesSection />
+      <ConstellationSection />
+      <MissionsSection />
+      <RequestSection />
+    </>
   );
 }

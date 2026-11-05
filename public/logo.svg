@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Apogee Orbital</title>
+  <rect width="64" height="64" rx="14" fill="#05070b"/>
+  <path d="M10 50 H16.3 L30 26 H23.7 Z M54 50 H47.7 L34 26 H40.3 Z" fill="#eef2f7"/>
+  <circle cx="32" cy="14.5" r="5.25" fill="#ffb547"/>
+  <rect x="8" y="54" width="48" height="2" fill="#eef2f7" fill-opacity="0.5"/>
+</svg>

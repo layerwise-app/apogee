@@ -22,6 +22,16 @@ export default defineConfig({
       ]
     }
   },
+  environments: {
+    // The database is first imported by the form's server function. Bundling
+    // drizzle up front keeps Vite from re-optimizing (and reloading React)
+    // in the middle of the first submission during development.
+    ssr: {
+      optimizeDeps: {
+        include: ['drizzle-orm', 'drizzle-orm/d1', 'drizzle-orm/sqlite-core']
+      }
+    }
+  },
   resolve: {
     alias: {
       '@tanstack/start': '@tanstack/react-start'

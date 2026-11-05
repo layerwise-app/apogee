@@ -1,87 +1,61 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
-// Better Auth tables. After adding an auth plugin, run
-// `pnpm run auth:generate --yes`, copy only its new tables and columns from the
-// generated `auth-schema.ts` into this section, then delete that file.
+// This site has no accounts, so it has no Better Auth tables. After changing
+// a table, run `pnpm run db:generate --name <what_changed>` and
+// `pnpm run db:migrate`. Migrations are applied to the production D1 database
+// when the app is published.
 
-export const user = sqliteTable('user', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  email: text('email').notNull().unique(),
-  emailVerified: integer('email_verified', { mode: 'boolean' })
-    .notNull()
-    .default(false),
-  image: text('image'),
+/**
+ * "Request sample imagery" form submissions. They show up in the project's
+ * Database panel in Layerwise. One row per work email.
+ */
+export const sampleRequests = sqliteTable(
+  'sample_requests',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    /** Lowercased and trimmed, so the same address can't be added twice. */
+    email: text('email').notNull().unique(),
+    organization: text('organization').notNull(),
+    areaOfInterest: text('area_of_interest').notNull(),
+    useCase: text('use_case').notNull(),
+    /** True when the owner was emailed about this request. */
+    ownerNotified: integer('owner_notified', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date())
+  },
+  (table) => [index('sample_requests_created_at_idx').on(table.createdAt)]
+);
+
+/**
+ * One row per accepted form attempt, used for the 5-per-hour limit. Visitors
+ * are identified by a salted SHA-256 of their IP address; raw IP addresses are
+ * never stored. Rows older than a day are deleted as new ones arrive.
+ */
+export const formAttempts = sqliteTable(
+  'form_attempts',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    visitorHash: text('visitor_hash').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
+  },
+  (table) => [
+    index('form_attempts_visitor_created_idx').on(
+      table.visitorHash,
+      table.createdAt
+    )
+  ]
+);
+
+/** Server-only values generated on first use, like the visitor hash salt. */
+export const appSecrets = sqliteTable('app_secrets', {
+  name: text('name').primaryKey(),
+  value: text('value').notNull(),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp' })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  role: text('role'),
-  banned: integer('banned', { mode: 'boolean' }).default(false),
-  banReason: text('ban_reason'),
-  banExpires: integer('ban_expires', { mode: 'timestamp' })
+    .$defaultFn(() => new Date())
 });
-
-export const session = sqliteTable('session', {
-  id: text('id').primaryKey(),
-  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
-  token: text('token').notNull().unique(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-  ipAddress: text('ip_address'),
-  userAgent: text('user_agent'),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  impersonatedBy: text('impersonated_by')
-});
-
-export const account = sqliteTable('account', {
-  id: text('id').primaryKey(),
-  accountId: text('account_id').notNull(),
-  providerId: text('provider_id').notNull(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  accessToken: text('access_token'),
-  refreshToken: text('refresh_token'),
-  idToken: text('id_token'),
-  accessTokenExpiresAt: integer('access_token_expires_at', {
-    mode: 'timestamp'
-  }),
-  refreshTokenExpiresAt: integer('refresh_token_expires_at', {
-    mode: 'timestamp'
-  }),
-  scope: text('scope'),
-  password: text('password'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
-});
-
-export const verification = sqliteTable('verification', {
-  id: text('id').primaryKey(),
-  identifier: text('identifier').notNull(),
-  value: text('value').notNull(),
-  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(
-    () => new Date()
-  ),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(
-    () => new Date()
-  )
-});
-
-// Define your own tables below, then run `pnpm run db:generate` to create a
-// migration. Migrations are applied to the production D1 database on publish.
-//
-// Example:
-//
-// export const posts = sqliteTable('posts', {
-//   id: integer('id').primaryKey({ autoIncrement: true }),
-//   title: text('title').notNull(),
-//   createdAt: integer('created_at', { mode: 'timestamp' })
-//     .notNull()
-//     .$defaultFn(() => new Date()),
-// });
