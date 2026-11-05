@@ -44,6 +44,7 @@ export const tasking = {
   },
   idle: 'Select a site to task a satellite.',
   noPass: 'No daylight pass in the next 36 hours. Polar night: try a site nearer the equator.',
+  openWater: 'Open water. Pick a point on land or a coastline.',
   revisitsLabel: 'Daylight passes, next 24 h',
   viewer: {
     beforeAfterLabel: 'Before and after',

@@ -26,6 +26,23 @@ const passOptions = {
 const accessRadiusKm =
   maxCentralAngleForOffNadir(constellation.maxOffNadirDeg, orbitRadius(constellation.altitudeKm)) * R_MEAN;
 
+/** Below this width the list, globe, and status stack, so tasking can run off screen. */
+const STACKED = '(max-width: 1023.98px)';
+
+/**
+ * On phones and tablets, scrolls the stage fully into view under the fixed
+ * header. `onlyIfNear` leaves the page alone if the visitor scrolled away.
+ */
+function revealStage(el: HTMLElement | null, onlyIfNear = false) {
+  if (!el || !window.matchMedia(STACKED).matches) return;
+  const r = el.getBoundingClientRect();
+  const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-h')) || 64;
+  if (r.top >= headerH && r.bottom <= window.innerHeight) return;
+  if (onlyIfNear && (r.bottom <= headerH || r.top >= window.innerHeight)) return;
+  const instant = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el.scrollIntoView({ block: 'start', behavior: instant ? 'instant' : 'smooth' });
+}
+
 export function TaskingDemo() {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -40,6 +57,11 @@ export function TaskingDemo() {
   const [pass, setPass] = useState<Pass | null>(null);
   const [revisits, setRevisits] = useState<number | null>(null);
   const countdownRef = useRef<HTMLSpanElement>(null);
+  const overlayCountdownRef = useRef<HTMLSpanElement>(null);
+  const captureRef = useRef<HTMLDivElement>(null);
+  const stepsRef = useRef<HTMLOListElement>(null);
+  // Whether the status steps are fully on screen (under the fixed header).
+  const [stepsOnScreen, setStepsOnScreen] = useState(true);
   const clockText = useRef<HTMLSpanElement>(null);
   const [progress, setProgress] = useState(0);
 
@@ -74,6 +96,9 @@ export function TaskingDemo() {
       if (!clock) return;
       const id = ++taskId.current;
       const target = preset ?? customSite(lat, lon);
+      // Keep the whole sequence on one screen on phones and tablets. Focus
+      // stays on whatever started it (a list button or the globe).
+      revealStage(stageRef.current);
       setSite(target);
       setRevisits(null);
       setProgress(0);
@@ -141,10 +166,13 @@ export function TaskingDemo() {
     const tick = () => {
       const t = clock.now();
       if (clockText.current) clockText.current.textContent = formatUtc(t);
-      if (pass && countdownRef.current) {
-        if (stage === 'countdown') countdownRef.current.textContent = `T−${formatDuration(pass.startMs - t)}`;
-        else if (stage === 'imaging') {
-          countdownRef.current.textContent = `T+${formatDuration(t - pass.startMs)}`;
+      if (pass) {
+        if (stage === 'countdown') {
+          const text = `T−${formatDuration(pass.startMs - t)}`;
+          if (countdownRef.current) countdownRef.current.textContent = text;
+          if (overlayCountdownRef.current) overlayCountdownRef.current.textContent = text;
+        } else if (stage === 'imaging') {
+          if (countdownRef.current) countdownRef.current.textContent = `T+${formatDuration(t - pass.startMs)}`;
           setProgress(Math.min(1, (t - pass.startMs) / (pass.endMs - pass.startMs)));
         }
       }
@@ -154,8 +182,41 @@ export function TaskingDemo() {
     return () => cancelAnimationFrame(raf);
   }, [inView, pageVisible, pass, stage]);
 
+  useEffect(() => {
+    const el = stepsRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-h')) || 64;
+    const io = new IntersectionObserver(([entry]) => setStepsOnScreen(entry.intersectionRatio > 0.98), {
+      rootMargin: `-${headerH}px 0px 0px 0px`,
+      threshold: [0, 0.5, 0.98, 1]
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  // When the capture opens: make sure its top is on screen, and if focus was
+  // on the globe (now hidden), hand it to the capture instead of losing it.
+  useEffect(() => {
+    if (stage !== 'delivered') return;
+    revealStage(stageRef.current, true);
+    const globe = canvasRef.current?.parentElement;
+    const active = document.activeElement;
+    if (globe && (active === globe || active === document.body || globe.contains(active))) {
+      captureRef.current?.focus({ preventScroll: true });
+    }
+  }, [stage]);
+
+  // "Task another site" hands focus back to the globe once it is visible again.
+  const focusGlobeNext = useRef(false);
+  useEffect(() => {
+    if (stage !== 'idle' || !focusGlobeNext.current) return;
+    focusGlobeNext.current = false;
+    canvasRef.current?.parentElement?.focus({ preventScroll: true });
+  }, [stage]);
+
   const reset = () => {
     taskId.current++;
+    focusGlobeNext.current = true;
     setStage('idle');
     setSite(null);
     setPass(null);
@@ -167,7 +228,6 @@ export function TaskingDemo() {
       engine.emphasizeTrack = false;
       engine.release();
     }
-    canvasRef.current?.parentElement?.focus();
   };
 
   const onGlobeKey = (e: React.KeyboardEvent) => {
@@ -187,6 +247,9 @@ export function TaskingDemo() {
 
   const busy = stage === 'countdown' || stage === 'imaging';
   const delivered = stage === 'delivered' && site && pass;
+  // Phones and tablets: while a task runs and the status panel below the
+  // globe is cut off, the live status is drawn over the globe instead.
+  const showOverlay = Boolean(site) && stage !== 'idle' && stage !== 'delivered' && !stepsOnScreen;
   const sat = pass ? sats.find((s) => s.id === pass.satId) : undefined;
 
   const meta = delivered
@@ -243,7 +306,10 @@ export function TaskingDemo() {
 
       {/* Stage: the globe, then the capture */}
       <div className='relative min-w-0 border-b border-line lg:border-b-0'>
-        <div ref={stageRef} className='relative aspect-square w-full sm:aspect-[4/3]'>
+        <div
+          ref={stageRef}
+          className='relative aspect-square w-full scroll-mt-[calc(var(--header-h)+12px)] sm:aspect-[4/3] max-lg:max-h-[calc(100svh-var(--header-h)-24px)]'
+        >
           {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- keyboard-operable globe widget */}
           <div
             className='group absolute inset-0 outline-none'
@@ -287,14 +353,75 @@ export function TaskingDemo() {
                 The 3D globe needs WebGL. Pick a site from the list to task it.
               </p>
             ) : (
-              <p className='label pointer-events-none absolute bottom-4 left-4 max-w-[calc(100%-2rem)] bg-bg/80 px-1.5 py-1 max-sm:hidden'>
+              <p
+                className={`label pointer-events-none absolute bottom-4 left-4 max-w-[calc(100%-2rem)] bg-bg/80 px-1.5 py-1 max-sm:hidden ${
+                  showOverlay ? 'max-lg:hidden' : ''
+                }`}
+              >
                 {tasking.keyboardHint}
               </p>
             )}
           </div>
 
+          {showOverlay && site ? (
+            // A visual copy of the status panel (which is the live region), so
+            // screen readers hear each step once.
+            <div
+              aria-hidden='true'
+              className='pointer-events-none absolute inset-x-3 bottom-3 border border-line bg-bg/90 px-3 py-2.5 lg:hidden'
+            >
+              <div className='flex items-baseline justify-between gap-3'>
+                <p className='label truncate text-ink'>{site.name}</p>
+                <p className='readout shrink-0 text-[11px] text-muted'>
+                  {formatLat(site.lat, 2)} · {formatLon(site.lon, 2)}
+                </p>
+              </div>
+              {stage === 'water' || stage === 'nopass' ? (
+                <p className='mt-2 text-[13px] leading-snug text-amber'>
+                  {stage === 'water' ? tasking.openWater : tasking.noPass}
+                </p>
+              ) : (
+                <dl className='mt-2 grid grid-cols-3 gap-3 border-t border-line pt-2'>
+                  <div className='min-w-0'>
+                    <dt className='label'>{tasking.steps.assigned}</dt>
+                    <dd className={`readout mt-1 truncate text-[12px] ${pass ? 'text-amber' : 'text-muted'}`}>
+                      {pass ? `${pass.satId} · ${sat?.plane}` : '---'}
+                    </dd>
+                  </div>
+                  <div className='min-w-0'>
+                    <dt className='label'>{tasking.steps.countdown}</dt>
+                    <dd className={`readout mt-1 truncate text-[12px] ${stage === 'countdown' ? 'text-amber' : 'text-ink'}`}>
+                      {stage === 'countdown' ? (
+                        <span ref={overlayCountdownRef}>T−--:--:--</span>
+                      ) : pass ? (
+                        `${formatUtc(pass.startMs).slice(11)} UTC`
+                      ) : (
+                        '--:--:--'
+                      )}
+                    </dd>
+                  </div>
+                  <div className='min-w-0'>
+                    <dt className='label'>{tasking.steps.imaging}</dt>
+                    <dd className={`readout mt-1 flex items-center gap-2 text-[12px] ${stage === 'imaging' ? 'text-amber' : 'text-muted'}`}>
+                      <span className='relative h-1 min-w-0 flex-1 bg-line'>
+                        <span className='absolute inset-y-0 left-0 bg-amber' style={{ width: `${progress * 100}%` }} />
+                      </span>
+                      {Math.round(progress * 100)}%
+                    </dd>
+                  </div>
+                </dl>
+              )}
+            </div>
+          ) : null}
+
           {delivered ? (
-            <div className='absolute inset-0 overflow-y-auto bg-bg p-3 sm:p-4'>
+            <div
+              ref={captureRef}
+              tabIndex={-1}
+              role='region'
+              aria-label={`${site.name} capture`}
+              className='absolute inset-0 overflow-y-auto bg-bg p-3 outline-offset-[-2px] sm:p-4'
+            >
               <CaptureViewer
                 key={site.id}
                 site={site}
@@ -324,7 +451,7 @@ export function TaskingDemo() {
           <p className='mt-2 text-[15px] text-muted'>{tasking.idle}</p>
         )}
 
-        <ol className='mt-5 space-y-0 border-t border-line'>
+        <ol ref={stepsRef} className='mt-5 space-y-0 border-t border-line'>
           {steps.map((s) => (
             <li key={s.key} className='flex items-center justify-between border-b border-line py-2.5'>
               <span className={`label ${s.state === 'todo' ? '' : 'text-ink'}`}>{tasking.steps[s.key]}</span>
@@ -342,7 +469,7 @@ export function TaskingDemo() {
           ))}
         </ol>
 
-        {stage === 'water' ? <p className='mt-4 text-[14px] text-amber'>Open water. Pick a point on land or a coastline.</p> : null}
+        {stage === 'water' ? <p className='mt-4 text-[14px] text-amber'>{tasking.openWater}</p> : null}
         {stage === 'nopass' ? <p className='mt-4 text-[14px] text-amber'>{tasking.noPass}</p> : null}
 
         {delivered ? (
